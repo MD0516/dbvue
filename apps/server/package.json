@@ -1,0 +1,45 @@
+{
+  "name": "@dbvue/server",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "description": "This project was bootstrapped with Fastify-CLI.",
+  "main": "./dist/app.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "pretest": "npm run build --workspace @dbvue/shared && npm run build --workspace @dbvue/web",
+    "test": "npm run build:ts && npm run test:ts && c8 node --test \"dist-test/**/*.test.js\"",
+    "test:ts": "tsc -p test/tsconfig.json",
+    "clean": "node --input-type=module -e \"import { rmSync } from 'node:fs'; for (const dir of ['dist', 'dist-test']) rmSync(dir, { recursive: true, force: true })\"",
+    "start": "fastify start -l info -a 127.0.0.1 -p 3000 dist/app.js",
+    "build:ts": "npm run clean && tsc -p tsconfig.json",
+    "watch:ts": "tsc -p tsconfig.json --watch",
+    "dev": "npm run build:ts && concurrently -k -p \"[{name}]\" -n \"TypeScript,App\" -c \"yellow.bold,cyan.bold\" \"npm:watch:ts\" \"npm:dev:start\"",
+    "dev:start": "fastify start --ignore-watch=.ts$ -w -l info -P -a 127.0.0.1 -p 3000 dist/app.js"
+  },
+  "keywords": [],
+  "dependencies": {
+    "@dbvue/shared": "^0.1.0",
+    "@fastify/autoload": "^6.0.0",
+    "@fastify/sensible": "^6.0.0",
+    "@fastify/static": "^10.1.12",
+    "fastify": "^5.0.0",
+    "fastify-cli": "^8.0.3",
+    "fastify-plugin": "^6.0.0",
+    "mongodb": "^7.9.1",
+    "mysql2": "^3.24.6",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/pg": "^8.23.1",
+    "c8": "^9.1.0",
+    "ts-node": "^10.4.0",
+    "typescript": "~6.0.2"
+  }
+}

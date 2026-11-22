@@ -1,0 +1,42 @@
+{
+  "name": "dbvue",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A lightweight, local-first database workspace for MySQL, PostgreSQL, and MongoDB.",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "dev": "npm run build --workspace @dbvue/shared && concurrently -k -n web,server,shared \"npm run dev --workspace @dbvue/web\" \"npm run dev --workspace @dbvue/server\" \"npm run dev --workspace @dbvue/shared\"",
+    "build": "npm run build --workspace @dbvue/shared && npm run build --workspace @dbvue/web && npm run build:ts --workspace @dbvue/server",
+    "start": "npm run build && npm run start --workspace @dbvue/server",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspace @dbvue/server"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.1"
+  },
+  "keywords": [
+    "database",
+    "database-client",
+    "mysql",
+    "postgresql",
+    "mongodb",
+    "local-first",
+    "developer-tools"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MD0516/dbvue.git"
+  },
+  "bugs": {
+    "url": "https://github.com/MD0516/dbvue/issues"
+  },
+  "homepage": "https://github.com/MD0516/dbvue#readme"
+}
