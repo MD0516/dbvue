@@ -14,9 +14,11 @@
   "scripts": {
     "dev": "npm run build --workspace @dbvue/shared && concurrently -k -n web,server,shared \"npm run dev --workspace @dbvue/web\" \"npm run dev --workspace @dbvue/server\" \"npm run dev --workspace @dbvue/shared\"",
     "build": "npm run build --workspace @dbvue/shared && npm run build --workspace @dbvue/web && npm run build:ts --workspace @dbvue/server",
-    "start": "npm run build && npm run start --workspace @dbvue/server",
+    "start": "npm run start --workspace @dbvue/server",
+    "start:production": "npm run build && npm run start",
     "lint": "npm run lint --workspaces --if-present",
-    "test": "npm run test --workspace @dbvue/server"
+    "test": "npm run test --workspace @dbvue/shared && npm run test --workspace @dbvue/server",
+    "generate:key": "node scripts/generate-encryption-key.mjs"
   },
   "devDependencies": {
     "concurrently": "^10.0.1"
@@ -38,5 +40,8 @@
   "bugs": {
     "url": "https://github.com/MD0516/dbvue/issues"
   },
-  "homepage": "https://github.com/MD0516/dbvue#readme"
+  "homepage": "https://github.com/MD0516/dbvue#readme",
+  "allowScripts": {
+    "better-sqlite3@12.10.0": true
+  }
 }

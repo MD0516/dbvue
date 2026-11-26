@@ -4,8 +4,13 @@ import { fileURLToPath } from 'node:url'
 import AutoLoad, { type AutoloadPluginOptions } from '@fastify/autoload'
 import fastifyStatic from '@fastify/static'
 import { type FastifyPluginAsync, type FastifyServerOptions } from 'fastify'
+import storagePlugin from './modules/storage/storage.plugin.js'
+import { loadApplicationEnvironment } from './config/environment.js'
+import { assertEncryptionKeyConfigured } from './modules/connections/services/credential-crypto.js'
+import type { SqliteDatabase } from './modules/storage/database.js'
 
 export interface AppOptions extends FastifyServerOptions, Partial<AutoloadPluginOptions> {
+  database?: SqliteDatabase
 }
 // Pass --options via CLI arguments in command to enable these options.
 const options: AppOptions = {
@@ -18,6 +23,12 @@ const app: FastifyPluginAsync<AppOptions> = async (
   fastify,
   opts
 ): Promise<void> => {
+  loadApplicationEnvironment()
+  assertEncryptionKeyConfigured()
+  await fastify.register(storagePlugin, {
+    database: opts.database,
+  })
+
   await fastify.register(AutoLoad, {
     dir: join(appDirectory, 'plugins'),
     options: opts,
