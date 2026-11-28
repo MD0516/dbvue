@@ -85,11 +85,12 @@ function getEndpointInfo(connection: ConnectionDto) {
 }
 
 export function ConnectionCard({
-    connection, openEditDialog, openDeleteDialog
+    connection, openEditDialog, openDeleteDialog, connect
 }: {
     connection: ConnectionDto
     openEditDialog: () => void
     openDeleteDialog: () => void
+    connect: () => void
 }) {
     const engine = connection.config.engine
     const meta = ENGINE_META[engine]
@@ -112,7 +113,11 @@ export function ConnectionCard({
         >
             {/* Actions */}
             <div className="absolute right-2 top-2.5 z-10">
-                <ConnectionActionsMenu openEditDialog={openEditDialog} openDeleteDialog={openDeleteDialog} />
+                <ConnectionActionsMenu
+                    openEditDialog={openEditDialog}
+                    openDeleteDialog={openDeleteDialog}
+                    connect={connect}
+                />
             </div>
 
             <Link

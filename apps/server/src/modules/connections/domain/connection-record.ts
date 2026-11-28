@@ -88,7 +88,7 @@ export interface ConnectionRecord {
     name: string
     config: ConnectionConfig
     encryptedCredentials: EncryptedConnectionCredentials | null
-
+    
     createdAt: string
     updatedAt: string
     lastConnectedAt: string | null

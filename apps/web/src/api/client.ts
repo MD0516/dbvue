@@ -4,18 +4,20 @@ import axios from 'axios'
 import type {
     ApiErrorResponse,
     ApiValidationIssue,
+    ConnectionErrorDto,
 } from '@dbvue/shared'
 
 /**
  * Represents a normalized API request error.
  *
- * Preserves HTTP status, error category and validation issues
- * returned by the backend.
+ * Preserves HTTP status, error category, validation issues
+ * and structured database connection errors.
  */
 export class ApiError extends Error {
     readonly statusCode?: number
     readonly code?: string
     readonly issues?: ApiValidationIssue[]
+    readonly connectionError?: ConnectionErrorDto
 
     constructor(
         message: string,
@@ -23,6 +25,7 @@ export class ApiError extends Error {
             statusCode?: number
             code?: string
             issues?: ApiValidationIssue[]
+            connectionError?: ConnectionErrorDto
         },
     ) {
         super(message)
@@ -31,6 +34,7 @@ export class ApiError extends Error {
         this.statusCode = options?.statusCode
         this.code = options?.code
         this.issues = options?.issues
+        this.connectionError = options?.connectionError
     }
 }
 
@@ -75,6 +79,7 @@ api.interceptors.response.use(
                             data?.statusCode ?? error.response?.status,
                         code: data?.error,
                         issues: data?.issues,
+                        connectionError: data?.connectionError,
                     },
                 ),
             )

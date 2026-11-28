@@ -1,8 +1,8 @@
-
 import {
     ConnectionConfigSchema,
     ConnectionDtoSchema,
     type ConnectionCredentialsUpdate,
+    type ConnectionSummary,
     type ParsedCreateConnectionRequest,
     type UpdateConnectionRequest,
 } from '@dbvue/shared'
@@ -11,6 +11,8 @@ import { randomUUID } from 'node:crypto'
 
 import type { ConnectionRecord, EncryptedConnectionCredentials } from '../domain/connection-record.js'
 import type { ConnectionRepository } from '../repositories/connection.repository.js'
+import type { ConnectionManager } from '../domain/connection-manager.js'
+
 import { encryptSecret } from './credential-crypto.js'
 
 /**
@@ -29,7 +31,7 @@ export class ConnectionEngineChangeError extends Error {
 
 /**
  * Encrypts supplied connection credentials before persistence.
- * 
+ *
  * Returns null when no secrets are provided.
  */
 function encryptCredentials(
@@ -39,7 +41,7 @@ function encryptCredentials(
     },
 ): EncryptedConnectionCredentials | null {
     if (!credentials) {
-        return null;
+        return null
     }
 
     const encrypted: EncryptedConnectionCredentials = {}
@@ -50,11 +52,11 @@ function encryptCredentials(
 
     if (credentials.tlsPrivateKeyPassphrase !== undefined) {
         encrypted.tlsPrivateKeyPassphrase = encryptSecret(
-            credentials.tlsPrivateKeyPassphrase
+            credentials.tlsPrivateKeyPassphrase,
         )
     }
 
-    return Object.keys(encrypted).length > 0 ? encrypted : null;
+    return Object.keys(encrypted).length > 0 ? encrypted : null
 }
 
 /**
@@ -102,11 +104,13 @@ function updateEncryptedCredentials(
 }
 
 /**
- * Manages saved connections and enforces connection-management rules.
+ * Manages saved database connections and orchestrates
+ * their connection lifecycle.
  */
 export class ConnectionService {
     constructor(
         private readonly repository: ConnectionRepository,
+        private readonly connectionManager: ConnectionManager,
     ) { }
 
     create(input: ParsedCreateConnectionRequest) {
@@ -143,7 +147,7 @@ export class ConnectionService {
         return record ? this.toDto(record) : null
     }
 
-    update(id: string, input: UpdateConnectionRequest) {
+    async update(id: string, input: UpdateConnectionRequest) {
         const existing = this.repository.findById(id)
 
         if (!existing) {
@@ -173,11 +177,95 @@ export class ConnectionService {
             return null
         }
 
+        await this.connectionManager.invalidate(id)
+
         return this.toDto(updated)
     }
 
-    delete(id: string): boolean {
+    async delete(id: string): Promise<boolean> {
+        const existing = this.repository.findById(id)
+
+        if (!existing) {
+            return false
+        }
+
+        await this.connectionManager.invalidate(id)
+
         return this.repository.deleteById(id)
+    }
+
+    /**
+     * Establishes a live connection to a saved database.
+     */
+    async connect(id: string) {
+        const existing = this.repository.findById(id)
+
+        if (!existing) {
+            return null
+        }
+
+        const session = await this.connectionManager.connect(id)
+
+        const latest = this.repository.findById(id)
+
+        if (latest) {
+            this.repository.update({
+                ...latest,
+                lastConnectedAt: session.connectedAt.toISOString(),
+            })
+        }
+
+        return session
+    }
+
+    /**
+     * Closes a live database connection.
+     */
+    async disconnect(id: string) {
+        const existing = this.repository.findById(id)
+
+        if (!existing) {
+            return false
+        }
+
+        await this.connectionManager.disconnect(id)
+
+        return true
+    }
+
+    /**
+     * Returns whether a saved connection currently has an active session.
+     */
+    getConnectionStatus(id: string) {
+        const existing = this.repository.findById(id)
+
+        if (!existing) {
+            return null
+        }
+
+        return this.connectionManager.isConnected(id)
+    }
+
+    getSummary() {
+        const connections = this.repository.findAll()
+
+        let connected = 0
+        let failed = 0
+
+        for (const connection of connections) {
+            if (this.connectionManager.isConnected(connection.id)) {
+                connected++
+            } else if (this.connectionManager.isFailed(connection.id)) {
+                failed++
+            }
+        }
+
+        return {
+            total: connections.length,
+            connected,
+            failed,
+            idle: connections.length - connected - failed,
+        }
     }
 
     private toDto(record: ConnectionRecord) {
@@ -186,6 +274,7 @@ export class ConnectionService {
             name: record.name,
             config: record.config,
             hasCredentials: record.encryptedCredentials !== null,
+            connected: this.connectionManager.isConnected(record.id),
             createdAt: record.createdAt,
             updatedAt: record.updatedAt,
             lastConnectedAt: record.lastConnectedAt,

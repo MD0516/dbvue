@@ -1,13 +1,14 @@
 import { Plus } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { useConnectionSummaryQuery } from "@/api/queries/connections"
 
-type StatusTone = "success" | "warning" | "destructive"
+type StatusTone = "success" | "warning" | "danger"
 
 const toneDot: Record<StatusTone, string> = {
     success: "bg-success",
     warning: "bg-warning",
-    destructive: "bg-destructive",
+    danger: "bg-destructive",
 }
 
 const StatusChip = ({
@@ -19,9 +20,17 @@ const StatusChip = ({
     count: number
     label: string
 }) => (
-    <Badge variant="outline" className="gap-1.5 border-border bg-card text-muted-foreground">
-        <span className={`size-1.5 rounded-full ${toneDot[tone]}`} aria-hidden="true" />
-        <span className="font-semibold tabular-nums text-foreground">{count}</span>
+    <Badge
+        variant="outline"
+        className="gap-1.5 border-border bg-card text-muted-foreground"
+    >
+        <span
+            className={`size-1.5 rounded-full ${toneDot[tone]}`}
+            aria-hidden="true"
+        />
+        <span className="font-semibold tabular-nums text-foreground">
+            {count}
+        </span>
         <span>{label}</span>
     </Badge>
 )
@@ -31,8 +40,11 @@ interface Props {
 }
 
 const Header = ({ onCreateConnection }: Props) => {
+    const { data } = useConnectionSummaryQuery()
+    const summary = data?.data
     const hour = new Date().getHours()
-    const greeting = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening"
+    const greeting =
+        hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening"
 
     return (
         <div className="flex flex-col gap-5 px-4 py-7 sm:px-8 lg:px-20">
@@ -41,9 +53,11 @@ const Header = ({ onCreateConnection }: Props) => {
                     <p className="text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
                         Good {greeting}
                     </p>
+
                     <h1 className="pt-1 text-2xl font-semibold tracking-tight text-foreground">
                         Your connections
                     </h1>
+
                     <p className="pt-1 text-sm text-muted-foreground">
                         Manage and access all your databases from one workspace.
                     </p>
@@ -55,11 +69,36 @@ const Header = ({ onCreateConnection }: Props) => {
                         role="status"
                         aria-label="Connection status"
                     >
-                        <StatusChip tone="success" count={3} label="Connected" />
-                        <StatusChip tone="warning" count={1} label="Idle" />
-                        <StatusChip tone="destructive" count={1} label="Error" />
+                        {summary && (
+                            <>
+                                {summary.connected > 0 && (
+                                    <StatusChip
+                                        tone="success"
+                                        count={summary.connected}
+                                        label="Connected"
+                                    />
+                                )}
+
+                                {summary.idle > 0 && (
+                                    <StatusChip
+                                        tone="warning"
+                                        count={summary.idle}
+                                        label="Idle"
+                                    />
+                                )}
+
+                                {summary.failed > 0 && (
+                                    <StatusChip
+                                        tone="danger"
+                                        count={summary.failed}
+                                        label="Failed"
+                                    />
+                                )}
+                            </>
+                        )}
                     </div>
-                    <Button size='lg' onClick={onCreateConnection}>
+
+                    <Button size="lg" onClick={onCreateConnection}>
                         <Plus className="size-4" />
                         New connection
                     </Button>

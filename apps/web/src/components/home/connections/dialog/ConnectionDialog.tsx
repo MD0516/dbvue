@@ -28,10 +28,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 
-import { useCreateConnectionMutation, useUpdateConnectionMutation } from "@/api/queries/connections"
+import { useCreateConnectionMutation, useTestConnectionMutation, useUpdateConnectionMutation } from "@/api/queries/connections"
 
-
-import { buildCreateConnectionRequest, buildUpdateConnectionRequest, getConnectionFormValues } from "./form-utils"
+import { buildCreateConnectionRequest, buildTestConnectionRequest, buildUpdateConnectionRequest, getConnectionFormValues } from "./form-utils"
 
 import { EngineSelector } from "./EngineSelector"
 import {
@@ -42,7 +41,7 @@ import {
 import { HostConnectionFields } from "./HostConnectionFields"
 import { UriConnectionFields } from "./UriConnectionFields"
 import { AdvancedConfiguration } from "./AdvancedConfiguration"
-import type { ConnectionDto } from "@dbvue/shared"
+import { type ConnectionDto } from "@dbvue/shared"
 import { ConnectionFormSchema, type ConnectionFormValues } from "./form-schema"
 import { DEFAULT_CONNECTION_FORM_VALUES } from "./constants"
 import { getConnectionAddress } from "../connection-display"
@@ -66,6 +65,7 @@ export function ConnectionDialog({
 
     const createMutation = useCreateConnectionMutation()
     const updateMutation = useUpdateConnectionMutation()
+    const testConnectionMutation = useTestConnectionMutation();
 
     const isPending =
         createMutation.isPending || updateMutation.isPending
@@ -88,6 +88,8 @@ export function ConnectionDialog({
         clearErrors,
         handleSubmit,
         formState: { errors },
+        getValues,
+        trigger,
     } = form
 
     const engine = useWatch({
@@ -113,7 +115,7 @@ export function ConnectionDialog({
         ))
 
         setBuildError(null)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
         open,
         isEditMode,
@@ -191,6 +193,25 @@ export function ConnectionDialog({
                 },
             },
         )
+    }
+
+    const handleTestConnection = async () => {
+        testConnectionMutation.reset()
+        setBuildError(null)
+
+        const isValid = await trigger()
+
+        if (!isValid) return
+
+        const values = getValues()
+        const result = buildTestConnectionRequest(values)
+
+        if (!result.success) {
+            setBuildError(result.message)
+            return
+        }
+
+        testConnectionMutation.mutate(result.payload)
     }
 
     return (
@@ -328,12 +349,11 @@ export function ConnectionDialog({
                                 type="button"
                                 variant="outline"
                                 size="default"
-                                disabled
                                 title="Connection testing is not available yet."
-                                className="cursor-not-allowed"
+                                onClick={handleTestConnection}
                             >
-                                <Activity className="mr-2 size-4" />
-                                Test connection
+                                {testConnectionMutation.isPending ? <Loader2 className="mr-2 size-4 animate-spin" /> : <Activity className="mr-2 size-4" />}
+                                {testConnectionMutation.isPending ? "Testing..." : "Test Connection"}
                             </Button>
 
                             <div className="grid w-full grid-cols-2 gap-2 sm:w-auto">

@@ -1,4 +1,4 @@
-import { useConnectionsQuery, useDeleteConnectionMutation } from "@/api/queries/connections"
+import { useConnectionsQuery, useConnectMutation, useDeleteConnectionMutation } from "@/api/queries/connections"
 import { useState, useMemo } from "react"
 import { ConnectionsToolbar, type ConnectionSort, type EngineFilter } from "./connections/ConnectionToolbar"
 import { ConnectionCard } from "./connections/ConnectionCard"
@@ -65,6 +65,7 @@ interface Props {
 const Connections = ({ onCreateConnection, onEditConnection }: Props) => {
   const { data: connections = [], isLoading, isError, refetch } = useConnectionsQuery()
   const deleteMutation = useDeleteConnectionMutation()
+  const connectMutation = useConnectMutation();
 
   const [search, setSearch] = useState("")
   const [engine, setEngine] = useState<EngineFilter>("all")
@@ -117,6 +118,12 @@ const Connections = ({ onCreateConnection, onEditConnection }: Props) => {
         setConnectionToDelete(null)
       },
     })
+  }
+
+  const handleConnect = (id: string) => {
+    if (!id) return
+
+    connectMutation.mutate(id)
   }
 
   if (isError) {
@@ -182,6 +189,7 @@ const Connections = ({ onCreateConnection, onEditConnection }: Props) => {
               connection={c}
               openEditDialog={() => onEditConnection(c)}
               openDeleteDialog={() => openDeleteDialog(c)}
+              connect={() => handleConnect(c.id)}
             />
           ))}
         </div>
@@ -193,6 +201,7 @@ const Connections = ({ onCreateConnection, onEditConnection }: Props) => {
               connection={c}
               openEditDialog={() => onEditConnection(c)}
               openDeleteDialog={() => openDeleteDialog(c)}
+              connect={() => handleConnect(c.id)}
             />
           ))}
         </div>

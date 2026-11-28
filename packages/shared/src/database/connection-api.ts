@@ -124,6 +124,7 @@ export const ConnectionDtoSchema = z.object({
     config: ConnectionConfigSchema,
 
     hasCredentials: z.boolean(),
+    connected: z.boolean(),
 
     createdAt: TimestampSchema,
     updatedAt: TimestampSchema,
@@ -255,3 +256,20 @@ export const TestConnectionResultSchema = z.discriminatedUnion('success', [
 export type TestConnectionResult = z.infer<
     typeof TestConnectionResultSchema
 >
+
+export const ConnectionStatusSchema = z.array(
+    z.string(),
+).min(1)
+
+export type ConnectionStatus = z.infer<
+    typeof ConnectionStatusSchema
+>
+
+export const ConnectionSummarySchema = z.object({
+    total: z.number().int().nonnegative(),
+    connected: z.number().int().nonnegative(),
+    idle: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+})
+
+export type ConnectionSummary = z.infer<typeof ConnectionSummarySchema>

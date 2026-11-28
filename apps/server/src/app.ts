@@ -8,6 +8,7 @@ import storagePlugin from './modules/storage/storage.plugin.js'
 import { loadApplicationEnvironment } from './config/environment.js'
 import { assertEncryptionKeyConfigured } from './modules/connections/services/credential-crypto.js'
 import type { SqliteDatabase } from './modules/storage/database.js'
+import { ZodError } from 'zod'
 
 export interface AppOptions extends FastifyServerOptions, Partial<AutoloadPluginOptions> {
   database?: SqliteDatabase
@@ -25,6 +26,26 @@ const app: FastifyPluginAsync<AppOptions> = async (
 ): Promise<void> => {
   loadApplicationEnvironment()
   assertEncryptionKeyConfigured()
+
+  fastify.setErrorHandler((error, request, reply) => {
+    if (error instanceof ZodError) {
+      return reply.code(400).send({
+        statusCode: 400,
+        error: 'Bad Request',
+        message: 'Request validation failed',
+        issues: error.issues,
+      })
+    }
+
+    fastify.log.error(error)
+
+    return reply.code(500).send({
+      statusCode: 500,
+      error: 'Internal Server Error',
+      message: 'An unexpected error occurred',
+    })
+  })
+
   await fastify.register(storagePlugin, {
     database: opts.database,
   })

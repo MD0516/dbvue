@@ -1,11 +1,13 @@
 
 import {
     CreateConnectionRequestSchema,
+    TestConnectionRequestSchema,
     UpdateConnectionRequestSchema,
     parseConnectionUri,
     type ConnectionConfig,
     type ConnectionDto,
     type CreateConnectionRequest,
+    type TestConnectionRequest,
     type UpdateConnectionRequest,
 } from "@dbvue/shared"
 
@@ -427,6 +429,47 @@ export function buildUpdateConnectionRequest(
     } satisfies UpdateConnectionRequest
 
     const result = UpdateConnectionRequestSchema.safeParse(payload)
+
+    if (!result.success) {
+        return {
+            success: false,
+            message: result.error.issues
+                .map((issue) => issue.message)
+                .join(" "),
+        }
+    }
+
+    return {
+        success: true,
+        payload: result.data,
+    }
+}
+
+export type BuildTestConnectionPayloadResult =
+    | {
+        success: true
+        payload: TestConnectionRequest
+    }
+    | {
+        success: false
+        message: string
+    }
+
+export function buildTestConnectionRequest(
+    values: ConnectionFormValues,
+): BuildTestConnectionPayloadResult {
+    const createResult = buildCreateConnectionRequest(values)
+
+    if (!createResult.success) {
+        return createResult
+    }
+
+    const { config, credentials } = createResult.payload
+
+    const result = TestConnectionRequestSchema.safeParse({
+        config,
+        ...(credentials ? { credentials } : {}),
+    })
 
     if (!result.success) {
         return {

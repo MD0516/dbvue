@@ -44,6 +44,17 @@ let database: SqliteDatabase
 let repository: ConnectionRepository
 let service: ConnectionService
 
+let invalidatedConnectionIds: string[] = []
+let shouldFailInvalidation = false
+let recordsFoundAtInvalidation: boolean[] = []
+
+let connectedConnectionIds = new Set<string>()
+
+let connectCalls: string[] = []
+let disconnectCalls: string[] = []
+
+let shouldFailConnect = false
+
 function createMysqlInput(withCredentials = true) {
     return CreateConnectionRequestSchema.parse({
         name: 'Local MySQL',
@@ -89,13 +100,68 @@ function createMysqlInputWithCredentials(credentials: {
     })
 }
 
+function createMockConnectionManager() {
+    return {
+        async invalidate(id: string) {
+            invalidatedConnectionIds.push(id)
+
+            recordsFoundAtInvalidation.push(
+                repository.findById(id) !== null,
+            )
+
+            if (shouldFailInvalidation) {
+                throw new Error('invalidation failed')
+            }
+
+            connectedConnectionIds.delete(id)
+        },
+
+        async connect(id: string) {
+            connectCalls.push(id)
+
+            if (shouldFailConnect) {
+                throw new Error('Connection failed')
+            }
+
+            connectedConnectionIds.add(id)
+
+            return {
+                connectionId: id,
+                engine: 'mysql',
+                connectedAt: new Date('2026-11-26T10:30:00.000Z'),
+            }
+        },
+
+        async disconnect(id: string) {
+            disconnectCalls.push(id)
+
+            connectedConnectionIds.delete(id)
+        },
+
+        isConnected(id: string) {
+            return connectedConnectionIds.has(id)
+        },
+    }
+}
+
 describe('ConnectionService', () => {
     beforeEach(() => {
         process.env.DBVUE_ENCRYPTION_KEY = TEST_KEY
-
         database = createTestDatabase()
         repository = new ConnectionRepository(database)
-        service = new ConnectionService(repository)
+
+        invalidatedConnectionIds = []
+        shouldFailInvalidation = false
+        recordsFoundAtInvalidation = []
+        connectedConnectionIds = new Set<string>()
+
+        connectCalls = []
+        disconnectCalls = []
+
+        shouldFailConnect = false
+
+        const manager = createMockConnectionManager()
+        service = new ConnectionService(repository, manager as never)
     })
 
     afterEach(() => {
@@ -189,14 +255,14 @@ describe('ConnectionService', () => {
         )
     })
 
-    it('should update a connection while preserving its credentials', () => {
+    it('should update a connection while preserving its credentials', async () => {
         const created = service.create(createMysqlInput())
 
         const beforeUpdate = repository.findById(created.id)
 
         assert.ok(beforeUpdate?.encryptedCredentials)
 
-        const updated = service.update(
+        const updated = await service.update(
             created.id,
             UpdateConnectionRequestSchema.parse({
                 name: 'Updated MySQL',
@@ -220,7 +286,7 @@ describe('ConnectionService', () => {
         )
     })
 
-    it('should reject changing the database engine', () => {
+    it('should reject changing the database engine', async () => {
         const created = service.create(createMysqlInput())
 
         const postgresConfig = ConnectionConfigSchema.parse({
@@ -238,8 +304,8 @@ describe('ConnectionService', () => {
             config: postgresConfig,
         })
 
-        assert.throws(
-            () => service.update(created.id, updateInput),
+        await assert.rejects(
+            service.update(created.id, updateInput),
             /Changing the database engine/,
         )
 
@@ -248,8 +314,8 @@ describe('ConnectionService', () => {
         assert.equal(unchanged?.config.engine, 'mysql')
     })
 
-    it('should return null when updating a missing connection', () => {
-        const updated = service.update(
+    it('should return null when updating a missing connection', async () => {
+        const updated = await service.update(
             'missing-connection',
             UpdateConnectionRequestSchema.parse({
                 name: 'Updated MySQL',
@@ -259,28 +325,28 @@ describe('ConnectionService', () => {
         assert.equal(updated, null)
     })
 
-    it('should delete an existing connection', () => {
+    it('should delete an existing connection', async () => {
         const created = service.create(createMysqlInput())
 
-        assert.equal(service.delete(created.id), true)
+        assert.equal(await service.delete(created.id), true)
         assert.equal(service.findById(created.id), null)
     })
 
-    it('should return false when deleting a missing connection', () => {
+    it('should return false when deleting a missing connection', async () => {
         assert.equal(
-            service.delete('missing-connection'),
+            await service.delete('missing-connection'),
             false,
         )
     })
 
-    it('should replace an existing password', () => {
+    it('should replace an existing password', async () => {
         const created = service.create(
             createMysqlInputWithCredentials({
                 password: TEST_PASSWORD,
             }),
         )
 
-        const updated = service.update(
+        const updated = await service.update(
             created.id,
             UpdateConnectionRequestSchema.parse({
                 credentials: {
@@ -302,7 +368,7 @@ describe('ConnectionService', () => {
         )
     })
 
-    it('should remove a password without removing the passphrase', () => {
+    it('should remove a password without removing the passphrase', async () => {
         const created = service.create(
             createMysqlInputWithCredentials({
                 password: TEST_PASSWORD,
@@ -310,7 +376,7 @@ describe('ConnectionService', () => {
             }),
         )
 
-        const updated = service.update(
+        const updated = await service.update(
             created.id,
             UpdateConnectionRequestSchema.parse({
                 credentials: {
@@ -408,7 +474,7 @@ describe('ConnectionService', () => {
         )
     })
 
-    it('should clear stored credentials when all secrets are removed', () => {
+    it('should clear stored credentials when all secrets are removed', async () => {
         const created = service.create(
             createMysqlInputWithCredentials({
                 password: TEST_PASSWORD,
@@ -416,7 +482,7 @@ describe('ConnectionService', () => {
             }),
         )
 
-        const updated = service.update(
+        const updated = await service.update(
             created.id,
             UpdateConnectionRequestSchema.parse({
                 credentials: {
@@ -434,4 +500,183 @@ describe('ConnectionService', () => {
         assert.equal(record?.encryptedCredentials, null)
     })
 
+    it('should invalidate the session after a successful update', async () => {
+        const created = service.create(createMysqlInput())
+
+        const updated = await service.update(
+            created.id,
+            UpdateConnectionRequestSchema.parse({
+                name: 'Updated MySQL',
+            }),
+        )
+
+        assert.ok(updated)
+        assert.deepEqual(invalidatedConnectionIds, [created.id])
+    })
+
+    it('should not invalidate when updating a missing connection', async () => {
+        const updated = await service.update(
+            'missing-connection',
+            UpdateConnectionRequestSchema.parse({
+                name: 'Updated MySQL',
+            }),
+        )
+
+        assert.equal(updated, null)
+        assert.deepEqual(invalidatedConnectionIds, [])
+    })
+
+    it('should propagate invalidation failure after an update', async () => {
+        const created = service.create(createMysqlInput())
+
+        shouldFailInvalidation = true
+
+        await assert.rejects(
+            service.update(
+                created.id,
+                UpdateConnectionRequestSchema.parse({
+                    name: 'Updated MySQL',
+                }),
+            ),
+            /invalidation failed/,
+        )
+
+        const record = repository.findById(created.id)
+
+        // The update was persisted before invalidation failed.
+        assert.equal(record?.name, 'Updated MySQL')
+        assert.deepEqual(invalidatedConnectionIds, [created.id])
+    })
+
+    it('should invalidate before deleting a connection', async () => {
+        const created = service.create(createMysqlInput())
+
+        const deleted = await service.delete(created.id)
+
+        assert.equal(deleted, true)
+        assert.deepEqual(invalidatedConnectionIds, [created.id])
+        assert.equal(repository.findById(created.id), null)
+        assert.deepEqual(recordsFoundAtInvalidation, [true])
+    })
+
+    it('should not invalidate when deleting a missing connection', async () => {
+        const deleted = await service.delete('missing-connection')
+
+        assert.equal(deleted, false)
+        assert.deepEqual(invalidatedConnectionIds, [])
+    })
+
+    it('should not delete a connection when invalidation fails', async () => {
+        const created = service.create(createMysqlInput())
+
+        shouldFailInvalidation = true
+
+        await assert.rejects(
+            service.delete(created.id),
+            /invalidation failed/,
+        )
+
+        assert.ok(repository.findById(created.id))
+        assert.deepEqual(invalidatedConnectionIds, [created.id])
+    })
+
+    describe("Connection Lifecycle", async () => {
+        it('should connect an existing saved connection', async () => {
+            const created = service.create(createMysqlInput())
+
+            const session = await service.connect(created.id)
+
+            assert.ok(session)
+            assert.equal(session.connectionId, created.id)
+            assert.deepEqual(connectCalls, [created.id])
+        })
+
+        it('should return null when connecting a missing connection', async () => {
+            const session = await service.connect('missing-connection')
+
+            assert.equal(session, null)
+            assert.deepEqual(connectCalls, [])
+        })
+
+        it('should disconnect an existing saved connection', async () => {
+            const created = service.create(createMysqlInput())
+
+            connectedConnectionIds.add(created.id)
+
+            const disconnected = await service.disconnect(created.id)
+
+            assert.equal(disconnected, true)
+            assert.deepEqual(disconnectCalls, [created.id])
+            assert.equal(connectedConnectionIds.has(created.id), false)
+        })
+
+        it('should return false when disconnecting a missing connection', async () => {
+            const disconnected = await service.disconnect(
+                'missing-connection',
+            )
+
+            assert.equal(disconnected, false)
+            assert.deepEqual(disconnectCalls, [])
+        })
+
+        it('should return true when a connection is connected', () => {
+            const created = service.create(createMysqlInput())
+
+            connectedConnectionIds.add(created.id)
+
+            assert.equal(
+                service.getConnectionStatus(created.id),
+                true,
+            )
+        })
+
+        it('should return false when a connection is disconnected', () => {
+            const created = service.create(createMysqlInput())
+
+            assert.equal(
+                service.getConnectionStatus(created.id),
+                false,
+            )
+        })
+
+        it('should return null when checking status of a missing connection', () => {
+            assert.equal(
+                service.getConnectionStatus('missing-connection'),
+                null,
+            )
+        })
+
+        it('should connect an existing saved connection and update lastConnectedAt', async () => {
+            const created = service.create(createMysqlInput())
+
+            const session = await service.connect(created.id)
+
+            assert.ok(session)
+            assert.equal(session.connectionId, created.id)
+            assert.deepEqual(connectCalls, [created.id])
+
+            const updatedRecord = repository.findById(created.id)
+
+            assert.equal(
+                updatedRecord?.lastConnectedAt,
+                '2026-11-26T10:30:00.000Z',
+            )
+        })
+
+        it('should not update lastConnectedAt when connection fails', async () => {
+            const created = service.create(createMysqlInput())
+
+            shouldFailConnect = true
+
+            await assert.rejects(
+                service.connect(created.id),
+                /Connection failed/,
+            )
+
+            const record = repository.findById(created.id)
+
+            assert.equal(record?.lastConnectedAt, null)
+            assert.deepEqual(connectCalls, [created.id])
+        })
+    })
 })

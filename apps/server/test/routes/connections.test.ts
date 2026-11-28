@@ -363,4 +363,191 @@ describe('Connection API', () => {
         assert.equal(response.statusCode, 404)
         assert.equal(response.json().message, 'Connection not found')
     })
+
+    describe("Connection Lifecycle Endpoints", () => {
+        it('should return 404 when connecting a missing connection', async (t) => {
+            const { server } = await createTestServer(t)
+
+            const response = await server.inject({
+                method: 'POST',
+                url: '/api/connections/missing-connection/connect',
+            })
+
+            assert.equal(response.statusCode, 404)
+            assert.equal(response.json().message, 'Connection not found')
+        })
+
+        it('should return 404 when disconnecting a missing connection', async (t) => {
+            const { server } = await createTestServer(t)
+
+            const response = await server.inject({
+                method: 'POST',
+                url: '/api/connections/missing-connection/disconnect',
+            })
+
+            assert.equal(response.statusCode, 404)
+            assert.equal(response.json().message, 'Connection not found')
+        })
+
+        it('should disconnect an existing connection without an active session', async (t) => {
+            const { server } = await createTestServer(t)
+
+            const created = await server.inject({
+                method: 'POST',
+                url: '/api/connections',
+                payload: mysqlConnection,
+            })
+
+            const connectionId = created.json().data.id
+
+            const response = await server.inject({
+                method: 'POST',
+                url: `/api/connections/${connectionId}/disconnect`,
+            })
+
+            assert.equal(response.statusCode, 200)
+
+            assert.deepEqual(response.json(), {
+                message: 'Connection disconnected successfully',
+            })
+        })
+
+        it('should return batch statuses for existing and missing connections', async (t) => {
+            const { server } = await createTestServer(t)
+
+            const firstCreated = await server.inject({
+                method: 'POST',
+                url: '/api/connections',
+                payload: mysqlConnection,
+            })
+
+            const secondCreated = await server.inject({
+                method: 'POST',
+                url: '/api/connections',
+                payload: {
+                    ...mysqlConnection,
+                    name: 'Another MySQL',
+                },
+            })
+
+            const firstId = firstCreated.json().data.id
+            const secondId = secondCreated.json().data.id
+
+            const response = await server.inject({
+                method: 'POST',
+                url: '/api/connections/status',
+                payload: [
+                    firstId,
+                    secondId,
+                    'missing-connection',
+                ],
+            })
+
+            assert.equal(response.statusCode, 200)
+
+            assert.deepEqual(response.json(), {
+                message: 'Connection statuses retrieved successfully',
+                data: [
+                    {
+                        connectionId: firstId,
+                        connected: false,
+                    },
+                    {
+                        connectionId: secondId,
+                        connected: false,
+                    },
+                    {
+                        connectionId: 'missing-connection',
+                        statusCode: 404,
+                        error: 'Not Found',
+                        message: 'Connection not found',
+                    },
+                ],
+            })
+        })
+
+        it('should reject an empty batch of connection IDs', async (t) => {
+            const { server } = await createTestServer(t)
+
+            const response = await server.inject({
+                method: 'POST',
+                url: '/api/connections/status',
+                payload: [],
+            })
+
+            assert.equal(response.statusCode, 400)
+        })
+
+        it('should reject an invalid batch status request', async (t) => {
+            const { server } = await createTestServer(t)
+
+            const response = await server.inject({
+                method: 'POST',
+                url: '/api/connections/status',
+                headers: {
+                    'content-type': 'application/json',
+                },
+                payload: JSON.stringify('connection-123'),
+            })
+
+            assert.equal(response.statusCode, 400)
+        })
+    })
+
+    describe("Test Connection Endpoint", () => {
+        it("should reject an invalid test connection request", async (t) => {
+            const { server } = await createTestServer(t);
+
+            const response = await server.inject({
+                method: "POST",
+                url: "/api/connections/test",
+                payload: {
+                    config: {},
+                },
+            });
+
+            assert.equal(response.statusCode, 400);
+        });
+
+        it("should test an unsaved connection without persisting it", async (t) => {
+            const { server } = await createTestServer(t);
+
+            const response = await server.inject({
+                method: "POST",
+                url: "/api/connections/test",
+                payload: {
+                    config: {
+                        engine: "mysql",
+                        address: {
+                            type: "tcp",
+                            host: "127.0.0.1",
+                            port: 1,
+                        },
+                        username: "test",
+                        database: "test",
+                    },
+                    credentials: {
+                        password: "test",
+                    },
+                },
+            });
+
+            // Port 1 should fail to establish a database connection.
+            assert.equal(response.statusCode, 502);
+
+            const body = response.json();
+
+            assert.equal(body.message, "Connection test failed");
+            assert.ok(body.connectionError);
+
+            // Testing a draft must not save it.
+            const savedConnections = await server.inject({
+                method: "GET",
+                url: "/api/connections",
+            });
+
+            assert.equal(savedConnections.statusCode, 200);
+            assert.equal(savedConnections.json().data.length, 0);
+        });
+    });
 })

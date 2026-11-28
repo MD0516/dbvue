@@ -9,10 +9,11 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 export function ConnectionActionsMenu({
-    openEditDialog, openDeleteDialog
+    openEditDialog, openDeleteDialog, connect
 }: {
     openEditDialog: () => void
     openDeleteDialog: () => void
+    connect: () => void
 }) {
     return (
         <DropdownMenu>
@@ -26,9 +27,9 @@ export function ConnectionActionsMenu({
                     <Pencil className="mr-2 size-4" />
                     Edit
                 </DropdownMenuItem>
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={connect}>
                     <Activity className="mr-2 size-4" />
-                    Test connection
+                    Connect
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem variant="destructive" onClick={openDeleteDialog}>

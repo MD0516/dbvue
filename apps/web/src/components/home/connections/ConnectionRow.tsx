@@ -22,11 +22,13 @@ import { cn } from "@/lib/utils"
 export function ConnectionRow({
     connection,
     openEditDialog,
-    openDeleteDialog
+    openDeleteDialog,
+    connect
 }: {
     connection: ConnectionDto
     openEditDialog: () => void
     openDeleteDialog: () => void
+    connect: () => void
 }) {
     const engine = connection.config.engine
     const meta = ENGINE_META[engine]
@@ -129,7 +131,11 @@ export function ConnectionRow({
 
             {/* Actions menu is not inside the link */}
             <div className="shrink-0">
-                <ConnectionActionsMenu openEditDialog={openEditDialog} openDeleteDialog={openDeleteDialog} />
+                <ConnectionActionsMenu
+                    openEditDialog={openEditDialog}
+                    openDeleteDialog={openDeleteDialog}
+                    connect={connect}
+                />
             </div>
         </div>
     )

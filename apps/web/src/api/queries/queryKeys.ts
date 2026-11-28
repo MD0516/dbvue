@@ -11,6 +11,8 @@ export const queryKeys = {
         list: [...connectionRoot, 'list'] as const,
         detail: (id: string) =>
             [...connectionRoot, 'detail', id] as const,
+        status: [...connectionRoot, 'status'] as const,
+        summary: ["connections", "summary"] as const,
     },
 } as const
 
